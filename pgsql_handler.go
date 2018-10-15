@@ -107,15 +107,15 @@ func (dbIf *DBIf) RegenerateUserTokenByEmail(email string) (token string, e erro
 	return token_uuid.String(), e
 }
 
-func (dbIf *DBIf) Post(userID int64, title, msg string) (msgID int64, e error) {
+func (dbIf *DBIf) Post(userEmail, title, msg string) (msgID int64, e error) {
 	if dbIf == nil {
 		e = fmt.Errorf("Invalid pointer to DB")
 		return
 	}
 	t := time.Now()
 	e = dbIf.db.QueryRow("insert into messages (created_by_user, title, message, created_on_date) "+
-		" values ($1, $2, $3, $4, $5) returning message_id",
-		userID, title, msg, t.Format("01-01-2006")).Scan(&msgID)
+		" values ($1, $2, $3, $4) returning message_id",
+		userEmail, title, msg, t).Scan(&msgID)
 	return
 }
 
@@ -131,6 +131,7 @@ func (dbIf *DBIf) Delete(userEmail, title string) (e error) {
 
 // List messages in chunck of 50 !
 func (dbIf *DBIf) List(pageIndex int) (m []Message, e error) {
+	var email, title, mesg sql.NullString
 	if dbIf == nil {
 		e = fmt.Errorf("Invalid pointer to DB")
 		return
@@ -141,8 +142,11 @@ func (dbIf *DBIf) List(pageIndex int) (m []Message, e error) {
 	rows, _ := dbIf.db.Query("select created_by_user, title, messages from messages limit 50 offset $1", pageIndex)
 	for rows.Next() {
 		var msg Message
-		e = rows.Scan(&msg.FromEmail, &msg.Title, &msg.Msg)
+		e = rows.Scan(&email, &title, &mesg)
 		if e == nil {
+			msg.Email = email.String
+			msg.Title = title.String
+			msg.Msg = mesg.String
 			m = append(m, msg)
 		} else {
 			break

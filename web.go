@@ -8,11 +8,41 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/julienschmidt/httprouter"
+	"github.com/satori/go.uuid"
 	"golang.org/x/crypto/bcrypt"
 	"log"
 	"net/http"
 	"time"
 )
+
+// Message Interface with web!
+type Message struct {
+	Title    string `json:"title"`
+	Msg      string `json:"message"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// User Interface with web!
+type User struct {
+	Email        string `json:"email"`
+	FirstName    string `json:"firstname,omitempty"`
+	LastName     string `json:"lastname,omitempty"`
+	Password     string `json:"password,omitempty"`
+	Status       string `json:"status,omitempty"`
+	Reason       string `json:"reason,omitempty"`
+	Location     string `json:"location,omitempty"`
+	Phone        string `json:"phone,omitempty"`
+	Preferences  string `json:"preferences,omitempty"`
+	OneTimeToken string `json:"token,omitempty"`
+}
+
+//JsonObjResp is the struct we fill to send resp
+type JsonObjResp struct {
+	Code int         `json:"code"`
+	Msg  string      `json:"message"`
+	Body interface{} `json:"body,omitempty"`
+}
 
 type WebDriver struct {
 	DB *DBIf
@@ -48,35 +78,6 @@ func CheckPasswordHashes(userGivenPassword, userDBPassword string) (bool, error)
 		return false, e
 	}
 	return true, nil
-}
-
-// Message Interface with web!
-type Message struct {
-	Title     string `json:"title"`
-	Msg       string `json:"message"`
-	FromEmail string `json:"from_email"`
-	Password  string `json:"user_password"`
-}
-
-// User Interface with web!
-type User struct {
-	Email        string `json:"email"`
-	FirstName    string `json:"firstname,omitempty"`
-	LastName     string `json:"lastname,omitempty"`
-	Password     string `json:"password,omitempty"`
-	Status       string `json:"status,omitempty"`
-	Reason       string `json:"reason,omitempty"`
-	Location     string `json:"location,omitempty"`
-	Phone        string `json:"phone,omitempty"`
-	Preferences  string `json:"preferences,omitempty"`
-	OneTimeToken string `json:"token,omitempty"`
-}
-
-//JsonObjResp is the struct we fill to send resp
-type JsonObjResp struct {
-	Code int         `json:"code"`
-	Msg  string      `json:"message"`
-	Body interface{} `json:"body,omitempty"`
 }
 
 func NewJsObj() *JsonObjResp {
@@ -138,12 +139,104 @@ func (web *WebDriver) SignupUser(w http.ResponseWriter, r *http.Request, ps http
 }
 
 func (web *WebDriver) LoginUser(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-}
+	user := User{}
+	js := NewJsObj()
+	if js == nil {
+		fmt.Fprintf(w, "something went wrong with server")
+		return
+	}
+	defer js.Send(w)
 
-func (web *WebDriver) UpdateUser(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	if e := json.NewDecoder(r.Body).Decode(&user); e != nil {
+		js.Msg = " failed to decode incoming msg "
+		return
+	}
+
+	if user.Email == "" || user.Password == "" {
+		js.Msg = "mandatory field missing: need email, password"
+		js.Body = map[string]interface{}{
+			"got": user,
+		}
+		return
+	}
+
+	_, _, _, password, _, _, _, _, _, e := web.DB.SearchUserByEmail(user.Email)
+	if e != nil {
+		js.Msg = "user | password mismatch or does not exist"
+		js.Body = map[string]interface{}{
+			"got": user,
+		}
+		return
+	}
+
+	if b, _ := CheckPasswordHashes(user.Password, password); b != true {
+		js.Msg = "user | password mismatch or does not exist"
+		return
+	}
+
+	js.Code = 0
+	js.Msg = "ok"
 }
 
 func (web *WebDriver) ResetUser(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	user := User{}
+	js := NewJsObj()
+	if js == nil {
+		fmt.Fprintf(w, "something went wrong with server")
+		return
+	}
+	defer js.Send(w)
+
+	if e := json.NewDecoder(r.Body).Decode(&user); e != nil {
+		js.Msg = " failed to decode incoming msg "
+		return
+	}
+
+	if user.Email == "" || user.OneTimeToken == "" {
+		js.Msg = "mandatory field missing: need token and email"
+		js.Body = map[string]interface{}{
+			"got00": user,
+		}
+		return
+	}
+
+	_, _, preferences, password, _, firstname, lastname, location, phone, e := web.DB.SearchUserByEmail(user.Email)
+	if e != nil {
+		js.Msg = "error:" + e.Error()
+		js.Body = map[string]interface{}{
+			"got0": user,
+		}
+		return
+	}
+
+	user.Status = "blocked"
+	user.OneTimeToken = uuid.Must(uuid.NewV4()).String()
+	user.FirstName = firstname
+	user.LastName = lastname
+	user.Password = password
+	user.Location = location
+	user.Phone = phone
+	user.Preferences = preferences
+	err := web.DB.UpdateUserByEmail(user.Email, user.Status, user.Password, user.FirstName, user.LastName, user.Location, user.Phone, user.OneTimeToken, user.Preferences)
+
+	if err != nil {
+		js.Msg = err.Error()
+		js.Body = map[string]interface{}{
+			"got2": user,
+		}
+		return
+	}
+
+	js.Code = 0
+	js.Msg = "ok"
+	js.Body = map[string]interface{}{
+		"email": user.Email,
+		"token": user.OneTimeToken,
+	}
+
+}
+
+func (web *WebDriver) UpdateUser(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	user := User{}
 	js := NewJsObj()
 	if js == nil {
@@ -184,6 +277,8 @@ func (web *WebDriver) ResetUser(w http.ResponseWriter, r *http.Request, ps httpr
 	// copy over null values with values from DB
 	if status == "blocked" {
 		user.Status = "active"
+	} else {
+		user.Status = status
 	}
 
 	if user.FirstName == "" && firstname != "" {
@@ -230,12 +325,148 @@ func (web *WebDriver) ResetUser(w http.ResponseWriter, r *http.Request, ps httpr
 }
 
 func (web *WebDriver) PostMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	message := Message{}
+	js := NewJsObj()
+	if js == nil {
+		fmt.Fprintf(w, "something went wrong with server")
+		return
+	}
+	defer js.Send(w)
+
+	if e := json.NewDecoder(r.Body).Decode(&message); e != nil {
+		js.Msg = " failed to decode incoming msg "
+		return
+	}
+
+	if message.Email == "" || message.Password == "" {
+		js.Msg = "mandatory field missing: need email, password"
+		js.Body = map[string]interface{}{
+			"got": message,
+		}
+		return
+	}
+
+	_, _, _, password, _, _, _, _, _, e := web.DB.SearchUserByEmail(message.Email)
+	if e != nil {
+		js.Msg = "user | password mismatch or does not exist"
+		js.Body = map[string]interface{}{
+			"got": message,
+		}
+		return
+	}
+
+	if b, _ := CheckPasswordHashes(message.Password, password); b != true {
+		js.Msg = "user | password mismatch or does not exist"
+		return
+	}
+
+	message_id, e := web.DB.Post(message.Email, message.Title, message.Msg)
+	if e != nil {
+		js.Msg = e.Error()
+		return
+	}
+
+	js.Code = 0
+	js.Msg = "ok"
+	js.Body = map[string]interface{}{
+		"message_id": message_id,
+		"title":      message.Title,
+	}
 }
 
 func (web *WebDriver) DeletePost(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	message := Message{}
+	js := NewJsObj()
+	if js == nil {
+		fmt.Fprintf(w, "something went wrong with server")
+		return
+	}
+	defer js.Send(w)
+
+	if e := json.NewDecoder(r.Body).Decode(&message); e != nil {
+		js.Msg = " failed to decode incoming msg "
+		return
+	}
+
+	if message.Email == "" || message.Password == "" {
+		js.Msg = "mandatory field missing: need email, password"
+		js.Body = map[string]interface{}{
+			"got": message,
+		}
+		return
+	}
+
+	_, _, _, password, _, _, _, _, _, e := web.DB.SearchUserByEmail(message.Email)
+	if e != nil {
+		js.Msg = "user | password mismatch or does not exist"
+		js.Body = map[string]interface{}{
+			"got": message,
+		}
+		return
+	}
+
+	if b, _ := CheckPasswordHashes(message.Password, password); b != true {
+		js.Msg = "user | password mismatch or does not exist"
+		return
+	}
+
+	e = web.DB.Delete(message.Email, message.Title)
+	if e != nil {
+		js.Msg = e.Error()
+		return
+	}
+
+	js.Code = 0
+	js.Msg = "ok"
 }
 
 func (web *WebDriver) ReadPost(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	message := Message{}
+	js := NewJsObj()
+	if js == nil {
+		fmt.Fprintf(w, "something went wrong with server")
+		return
+	}
+	defer js.Send(w)
+
+	if e := json.NewDecoder(r.Body).Decode(&message); e != nil {
+		js.Msg = " failed to decode incoming msg "
+		return
+	}
+
+	if message.Email == "" || message.Password == "" {
+		js.Msg = "mandatory field missing: need email, password"
+		js.Body = map[string]interface{}{
+			"got": message,
+		}
+		return
+	}
+
+	_, _, _, password, _, _, _, _, _, e := web.DB.SearchUserByEmail(message.Email)
+	if e != nil {
+		js.Msg = "user | password mismatch or does not exist"
+		js.Body = map[string]interface{}{
+			"got": message,
+		}
+		return
+	}
+
+	if b, _ := CheckPasswordHashes(message.Password, password); b != true {
+		js.Msg = "user | password mismatch or does not exist"
+		return
+	}
+
+	m, e := web.DB.List(0)
+	if e != nil {
+		js.Msg = e.Error()
+		return
+	}
+
+	js.Code = 0
+	js.Msg = "ok"
+	js.Body = map[string]interface{}{
+		"messages": m,
+	}
 }
 
 func main() {
@@ -243,10 +474,10 @@ func main() {
 	defer web.DestroyWebDriver()
 
 	r := httprouter.New()
-	r.POST("/api/signup", web.SignupUser)
-	r.POST("/api/login", web.LoginUser)
-	r.POST("/api/reset", web.ResetUser)
-	r.POST("/api/update", web.UpdateUser)
+	r.POST("/api/signup", web.SignupUser) // done
+	r.POST("/api/login", web.LoginUser)   // done
+	r.POST("/api/reset", web.ResetUser)   // done
+	r.POST("/api/update", web.UpdateUser) // done
 	r.POST("/api/post", web.PostMessage)
 	r.POST("/api/read", web.ReadPost)
 	r.POST("/api/delete", web.DeletePost)
