@@ -3,16 +3,18 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"time"
+
 	_ "github.com/lib/pq"
 	"github.com/satori/go.uuid"
-	"time"
 )
 
+//DBIf db object
 type DBIf struct {
 	db *sql.DB
 }
 
-//InitDB checks psql and connects to it
+//NewDB checks pgsql and connects to it
 func NewDB() (*DBIf, error) {
 
 	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+"password=%s dbname=%s sslmode=disable",
@@ -34,6 +36,7 @@ func NewDB() (*DBIf, error) {
 	return dbif, nil
 }
 
+//DestroyDB destroy db obj
 func (dbIf *DBIf) DestroyDB() {
 	if dbIf != nil && dbIf.db != nil {
 		dbIf.db.Close()
@@ -41,30 +44,28 @@ func (dbIf *DBIf) DestroyDB() {
 }
 
 //InsertNewUser is when new user signup
-func (dbIf *DBIf) InsertNewUser(email, firstname, lastname string) (user_id int64, token string, e error) {
+func (dbIf *DBIf) InsertNewUser(email, firstname, lastname string) (ID int64, token string, e error) {
 	if dbIf == nil {
 		e = fmt.Errorf("Invalid pointer to DB")
 		return
 	}
-	var id int64
-	e = dbIf.db.QueryRow("select user_id,firstname,lastname from users where email=$1", email).Scan(&id)
+	e = dbIf.db.QueryRow("select user_id,firstname,lastname from users where email=$1", email).Scan(&ID)
 	if e == nil {
 		e = fmt.Errorf("user exists")
 		return
 	}
-	token_uuid := uuid.Must(uuid.NewV4())
-	token = token_uuid.String()
+	tokenUUID := uuid.Must(uuid.NewV4())
+	token = tokenUUID.String()
 	e = dbIf.db.QueryRow("insert into users (firstname, lastname, email,  status, one_time_token) "+
 		" values ($1, $2, $3, $4, $5) returning user_id",
-		firstname, lastname, email, "blocked", token_uuid.String()).Scan(&id)
+		firstname, lastname, email, "blocked", tokenUUID.String()).Scan(&ID)
 	if e != nil {
 		return
 	}
-	return id, token_uuid.String(), nil
+	return ID, tokenUUID.String(), nil
 }
 
 //SearchUserByEmail search user by email.
-
 func (dbIf *DBIf) SearchUserByEmail(email string) (id int64, token, prefs, password, status, firstname, lastname, location, phone string, e error) {
 	var pgtoken, pgprefs, pgpassword, pgstatus, pgfirstname, pglastname, pglocation, pgphone sql.NullString
 
@@ -100,13 +101,14 @@ func (dbIf *DBIf) RegenerateUserTokenByEmail(email string) (token string, e erro
 		e = fmt.Errorf("Invalid pointer to DB")
 		return
 	}
-	token_uuid := uuid.Must(uuid.NewV4())
-	token = token_uuid.String()
+	tokenUUID := uuid.Must(uuid.NewV4())
+	token = tokenUUID.String()
 	_, e = dbIf.db.Exec("update users set status=$1, one_time_token=$2 where email = $3",
 		"blocked", token, email)
-	return token_uuid.String(), e
+	return tokenUUID.String(), e
 }
 
+//Post user post some msg
 func (dbIf *DBIf) Post(userEmail, title, msg string) (msgID int64, e error) {
 	if dbIf == nil {
 		e = fmt.Errorf("Invalid pointer to DB")
@@ -129,7 +131,7 @@ func (dbIf *DBIf) Delete(userEmail, title string) (e error) {
 	return
 }
 
-// List messages in chunck of 50 !
+// List messages in chunk of 50 !
 func (dbIf *DBIf) List(pageIndex int) (m []Message, e error) {
 	var email, title, mesg sql.NullString
 	if dbIf == nil {
@@ -139,7 +141,7 @@ func (dbIf *DBIf) List(pageIndex int) (m []Message, e error) {
 	if pageIndex < 0 {
 		pageIndex = 0
 	}
-	rows, _ := dbIf.db.Query("select created_by_user, title, messages from messages limit 50 offset $1", pageIndex)
+	rows, _ := dbIf.db.Query("select created_by_user, title, messages from messages ORDER BY message_id desc limit 50 offset $1", pageIndex)
 	for rows.Next() {
 		var msg Message
 		e = rows.Scan(&email, &title, &mesg)
