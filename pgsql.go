@@ -11,7 +11,7 @@ const (
 //DBInterface defined what DB module must offer for users
 type DBInterface interface {
 	NewDB() error
-	InsertNewUser(email, firstname, lastname string) (user_id int64, token string, e error)
+	InsertNewUser(email, firstname, lastname string) (userID int64, token string, e error)
 	UpdateUserByEmail(email, status, password, firstname, lastname, location, phone, token, preference string) (e error)
 	SearchUserByEmail(email string) (id int64, status, firstname, lastname, location, phone string, e error)
 	RegenerateUserTokenByEmail(email string) (token string, e error)

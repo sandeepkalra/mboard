@@ -38,17 +38,19 @@ type User struct {
 	OneTimeToken string `json:"token,omitempty"`
 }
 
-//JsonObjResp is the struct we fill to send resp
-type JsonObjResp struct {
+//JSONObjResp is the struct we fill to send resp
+type JSONObjResp struct {
 	Code int         `json:"code"`
 	Msg  string      `json:"message"`
 	Body interface{} `json:"body,omitempty"`
 }
 
+//WebDriver single main web struct
 type WebDriver struct {
 	DB *DBIf
 }
 
+//NewWeb new driver
 func NewWeb() *WebDriver {
 	db, err := NewDB()
 	if err != nil {
@@ -57,6 +59,7 @@ func NewWeb() *WebDriver {
 	return &WebDriver{DB: db}
 }
 
+//DestroyWebDriver destroys all
 func (web *WebDriver) DestroyWebDriver() {
 	if web != nil && web.DB != nil {
 		web.DB.DestroyDB()
@@ -81,11 +84,13 @@ func CheckPasswordHashes(userGivenPassword, userDBPassword string) (bool, error)
 	return true, nil
 }
 
-func NewJsObj() *JsonObjResp {
-	return &JsonObjResp{Code: -1, Msg: "Invalid Request"}
+//NewJsObj returns rew JSON response object
+func NewJsObj() *JSONObjResp {
+	return &JSONObjResp{Code: -1, Msg: "Invalid Request"}
 }
 
-func (js *JsonObjResp) Send(w http.ResponseWriter) {
+//Send sends the JSON data back
+func (js *JSONObjResp) Send(w http.ResponseWriter) {
 	if js == nil {
 		fmt.Println("Js obj is still nil ")
 		return
@@ -100,6 +105,7 @@ func (js *JsonObjResp) Send(w http.ResponseWriter) {
 	return
 }
 
+//SignupUser sign-up new user
 func (web *WebDriver) SignupUser(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	user := User{}
 	js := NewJsObj()
@@ -139,6 +145,7 @@ func (web *WebDriver) SignupUser(w http.ResponseWriter, r *http.Request, ps http
 	}
 }
 
+//LoginUser login the user
 func (web *WebDriver) LoginUser(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	user := User{}
 	js := NewJsObj()
@@ -179,6 +186,7 @@ func (web *WebDriver) LoginUser(w http.ResponseWriter, r *http.Request, ps httpr
 	js.Msg = "ok"
 }
 
+//ResetUser sets the user to blocked state till he goes back and unblocks itself with new info.
 func (web *WebDriver) ResetUser(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	user := User{}
 	js := NewJsObj()
@@ -237,6 +245,7 @@ func (web *WebDriver) ResetUser(w http.ResponseWriter, r *http.Request, ps httpr
 
 }
 
+//UpdateUser user wants to update its profile
 func (web *WebDriver) UpdateUser(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	user := User{}
 	js := NewJsObj()
@@ -325,6 +334,7 @@ func (web *WebDriver) UpdateUser(w http.ResponseWriter, r *http.Request, ps http
 	}
 }
 
+//PostMessage user wants to post a message
 func (web *WebDriver) PostMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	message := Message{}
 	js := NewJsObj()
@@ -361,7 +371,7 @@ func (web *WebDriver) PostMessage(w http.ResponseWriter, r *http.Request, ps htt
 		return
 	}
 
-	message_id, e := web.DB.Post(message.Email, message.Title, message.Msg)
+	messageID, e := web.DB.Post(message.Email, message.Title, message.Msg)
 	if e != nil {
 		js.Msg = e.Error()
 		return
@@ -370,11 +380,12 @@ func (web *WebDriver) PostMessage(w http.ResponseWriter, r *http.Request, ps htt
 	js.Code = 0
 	js.Msg = "ok"
 	js.Body = map[string]interface{}{
-		"message_id": message_id,
+		"message_id": messageID,
 		"title":      message.Title,
 	}
 }
 
+//DeletePost user wants to delete his/her post
 func (web *WebDriver) DeletePost(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	message := Message{}
 	js := NewJsObj()
@@ -421,6 +432,7 @@ func (web *WebDriver) DeletePost(w http.ResponseWriter, r *http.Request, ps http
 	js.Msg = "ok"
 }
 
+//ReadPost user(anonymous) can read post
 func (web *WebDriver) ReadPost(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	fmt.Println("got ReadPost Request")
 	message := Message{}
@@ -471,6 +483,7 @@ func (web *WebDriver) ReadPost(w http.ResponseWriter, r *http.Request, ps httpro
 	}
 }
 
+//main get the ball rolling
 func main() {
 	web := NewWeb()
 	defer web.DestroyWebDriver()
