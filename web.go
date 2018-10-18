@@ -8,11 +8,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/julienschmidt/httprouter"
+	"github.com/rs/cors"
 	"github.com/satori/go.uuid"
 	"golang.org/x/crypto/bcrypt"
 	"log"
 	"net/http"
-	"time"
+	_ "time"
 )
 
 // Message Interface with web!
@@ -421,6 +422,7 @@ func (web *WebDriver) DeletePost(w http.ResponseWriter, r *http.Request, ps http
 }
 
 func (web *WebDriver) ReadPost(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	fmt.Println("got ReadPost Request")
 	message := Message{}
 	js := NewJsObj()
 	if js == nil {
@@ -480,14 +482,19 @@ func main() {
 	r.POST("/api/update", web.UpdateUser) // done
 	r.POST("/api/post", web.PostMessage)
 	r.POST("/api/read", web.ReadPost)
+	r.GET("/api/read", web.ReadPost)
 	r.POST("/api/delete", web.DeletePost)
-	srv := &http.Server{
-		Handler: r,
-		Addr:    "127.0.0.1:8080",
-		// Good practice: enforce timeouts for servers you create!
-		WriteTimeout: 30 * time.Second,
-		ReadTimeout:  30 * time.Second,
-	}
+
+	handler := cors.Default().Handler(r)
 	fmt.Println("listening on :8080")
-	log.Fatal(srv.ListenAndServe())
+	http.ListenAndServe(":8080", handler)
+	/*
+		srv := &http.Server{
+			Handler: r,
+			Addr:    "127.0.0.1:8080",
+			WriteTimeout: 30 * time.Second,
+			ReadTimeout:  30 * time.Second,
+		}
+		log.Fatal(srv.ListenAndServe())
+	*/
 }
