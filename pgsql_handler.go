@@ -141,7 +141,7 @@ func (dbIf *DBIf) List(pageIndex int) (m []Message, e error) {
 	if pageIndex < 0 {
 		pageIndex = 0
 	}
-	rows, _ := dbIf.db.Query("select created_by_user, title, messages from messages ORDER BY message_id desc limit 50 offset $1", pageIndex)
+	rows, _ := dbIf.db.Query("select created_by_user, title, message from messages ORDER BY message_id desc limit 50 offset $1", pageIndex)
 	for rows.Next() {
 		var msg Message
 		e = rows.Scan(&email, &title, &mesg)

@@ -434,8 +434,6 @@ func (web *WebDriver) DeletePost(w http.ResponseWriter, r *http.Request, ps http
 
 //ReadPost user(anonymous) can read post
 func (web *WebDriver) ReadPost(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	fmt.Println("got ReadPost Request")
-	message := Message{}
 	js := NewJsObj()
 	if js == nil {
 		fmt.Fprintf(w, "something went wrong with server")
@@ -443,32 +441,35 @@ func (web *WebDriver) ReadPost(w http.ResponseWriter, r *http.Request, ps httpro
 	}
 	defer js.Send(w)
 
-	if e := json.NewDecoder(r.Body).Decode(&message); e != nil {
-		js.Msg = " failed to decode incoming msg "
-		return
-	}
+	/*
+		message := Message{}
+			if e := json.NewDecoder(r.Body).Decode(&message); e != nil {
+				js.Msg = " failed to decode incoming msg "
+				return
+			}
 
-	if message.Email == "" || message.Password == "" {
-		js.Msg = "mandatory field missing: need email, password"
-		js.Body = map[string]interface{}{
-			"got": message,
-		}
-		return
-	}
+				if message.Email == "" || message.Password == "" {
+					js.Msg = "mandatory field missing: need email, password"
+					js.Body = map[string]interface{}{
+						"got": message,
+					}
+					return
+				}
 
-	_, _, _, password, _, _, _, _, _, e := web.DB.SearchUserByEmail(message.Email)
-	if e != nil {
-		js.Msg = "user | password mismatch or does not exist"
-		js.Body = map[string]interface{}{
-			"got": message,
-		}
-		return
-	}
+					_, _, _, password, _, _, _, _, _, e := web.DB.SearchUserByEmail(message.Email)
+					if e != nil {
+						js.Msg = "user | password mismatch or does not exist"
+						js.Body = map[string]interface{}{
+							"got": message,
+						}
+						return
+					}
 
-	if b, _ := CheckPasswordHashes(message.Password, password); b != true {
-		js.Msg = "user | password mismatch or does not exist"
-		return
-	}
+					if b, _ := CheckPasswordHashes(message.Password, password); b != true {
+						js.Msg = "user | password mismatch or does not exist"
+						return
+					}
+	*/
 
 	m, e := web.DB.List(0)
 	if e != nil {
@@ -495,7 +496,6 @@ func main() {
 	r.POST("/api/update", web.UpdateUser) // done
 	r.POST("/api/post", web.PostMessage)
 	r.POST("/api/read", web.ReadPost)
-	r.GET("/api/read", web.ReadPost)
 	r.POST("/api/delete", web.DeletePost)
 
 	handler := cors.Default().Handler(r)
